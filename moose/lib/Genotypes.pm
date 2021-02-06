@@ -76,5 +76,31 @@ sub agmr_hgmr{
   return [$agmr, $hgmr];
 }
 
-1
-  ;
+sub remove_bad_markers{
+  my $self = shift;
+  my $mark_bad_marker_ids = shift; # array ref, with ids of 'bad' markers replaced with undef.
+  my $new_genotypes_string = '';
+  my @new_qual_counts = (0, 0, 0, 0, 0); # for updated accession gt quality counts
+  my $L = length $self->genotypes();
+  die if(scalar @$mark_bad_marker_ids != $L);
+  for my $i (0..$L-1) {
+    my $gt = substr($self->genotypes(), $i, 1);
+    if (defined $mark_bad_marker_ids->[$i]) { # this marker is Ok
+      $new_genotypes_string .= substr($self->genotypes(), $i, 1);
+      if ($gt eq 'X') {
+	$new_qual_counts[3]++;
+      } elsif ($gt eq 'x') {
+	$new_qual_counts[4]++;
+      } else {
+	$new_qual_counts[$gt]++;
+      }
+    } else {			# this marker is 'bad'
+
+    }
+  }
+  $self->genotypes($new_genotypes_string);
+  $self->quality_counts(join(" ", @new_qual_counts));
+  die if(length $new_genotypes_string  !=  sum(@new_qual_counts));
+}
+
+1;
