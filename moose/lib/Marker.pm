@@ -16,10 +16,10 @@ has id => (
 	   required => 1,
 	  );
 
-has counts => ( # e.g. [500, 11, 400, 13, 100] counts of 0, 1, 2, in between 0 and 1, and in between 1 and 2.
+has counts => ( # e.g. [500, 11, 400, 13, 100, 1024] counts of 0, 1, 2, in between 0 and 1, and in between 1 and 2, and sum of all 5
 	       isa => 'ArrayRef',
 	       is => 'rw',
-	       default => sub { [] },
+	       default => sub { [0, 0, 0, 0, 0, 0] },
 	      );
 
 sub increment_counts{
@@ -35,8 +35,10 @@ sub increment_counts{
     $self->counts()->[3]++;
   } elsif($gt eq 'x'){
     $self->counts()->[4]++;
+  }else{
+    die "Unknown genotype: $gt \n";
   }
-  $self->counts()->[5]++; 
+  $self->counts()->[5]++;
 }
 
 sub hardy_weinberg{ # if hardy-weinberg eq. frequencies, return value close to 1.
