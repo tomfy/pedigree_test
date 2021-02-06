@@ -105,6 +105,24 @@ sub as_string_ns{
   return $the_string;
 }
 
+sub as_string_Ns{
+  my $self = shift;
+  my $gtsetobj = $self->genotypes_set();
+  my $the_string = '';
+  $the_string .= "# n_accessions: " . $gtsetobj->n_accessions() . "\n";
+  $the_string .= "# n_markers: " . $gtsetobj->n_markers() . "\n";
+  $the_string .= "# delta: " . $gtsetobj->delta() . "\n";
+
+#  while (my ($accid, $pedchk) = each %{$self->pedigree_checks()}) {
+    for my $accid (@{$gtsetobj->accession_ids()}){
+      my $gtsobj = $gtsetobj->accid_genotypes()->{$accid};
+      my $pedchk = $self->pedigree_checks()->{$accid} // undef;
+    $the_string .= $accid . "  " . $gtsobj->quality_counts() . "  ";
+    $the_string .= (defined $pedchk)? $pedchk->as_string_Ns() . "\n" : "  No pedigree \n";
+  }
+  return $the_string;
+}
+
 sub as_string_xs{
   my $self = shift;
 
