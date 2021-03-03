@@ -109,7 +109,7 @@ sub BUILD {
     $out_string_012Xx .= "$acc_id $s012Xx\n"; 
 
     die if(length $s012Xx != $n_markers);
-    $id_gts{$acc_id} = Genotypes->new({id => $acc_id, genotypes01234 => $s01234, genotypes => $s012Xx, quality_counts => $q_counts_str});
+    $id_gts{$acc_id} = Genotypes->new({id => $acc_id, genotypes => $s01234, quality_counts => $q_counts_str});
     $accessions_read++;
     print STDERR "# accessions read: $accessions_read \n" if(($accessions_read % 100) == 0);
   }

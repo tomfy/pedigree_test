@@ -401,9 +401,9 @@ sub as_string_z{		# lump together n001 n221, etc.
 sub triple_counts_27{ # get n000, n001, for the pedigree etc.
   my $self = shift;
 
-  my $mat_gtstr = $self->mat_gtsobj()->genotypes01234();
-  my $pat_gtstr = $self->pat_gtsobj()->genotypes01234();
-  my $acc_gtstr = $self->acc_gtsobj()->genotypes01234();
+  my $mat_gtstr = $self->mat_gtsobj()->genotypes();
+  my $pat_gtstr = $self->pat_gtsobj()->genotypes();
+  my $acc_gtstr = $self->acc_gtsobj()->genotypes();
   $mat_gtstr =~ s/4/3/g;
   $pat_gtstr =~ s/4/3/g;
   $acc_gtstr =~ s/4/3/g;
