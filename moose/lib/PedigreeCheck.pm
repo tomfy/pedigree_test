@@ -70,6 +70,12 @@ has nxyzs => (
 	      required => 0,
 	     );
 
+has mxyzs => (		# m020 = N020 + N202, m012 = N012 + N210, etc.
+	      isa => 'ArrayRef[Int]',
+	      is => 'rw',
+	      required => 0,
+	     );
+
 has n00x => (
 	     isa => 'ArrayRef[Int]',
 	     is => 'rw',
@@ -117,6 +123,42 @@ has Nxyzs => (
 	      is => 'rw',
 	      required => 0,
 	     );
+
+has m_hgmr_n_d => ( 
+		   isa => 'ArrayRef[Int]', # [numerator, denominator]
+		   is => 'rw',
+		   required => 0,
+		  );
+
+has p_hgmr_n_d => ( 
+		   isa => 'ArrayRef[Int]', # [numerator, denominator]
+		   is => 'rw',
+		   required => 0,
+		  );
+
+has mp_agmr_n_d => (  # numerator and denom of agmr between mat & pat.
+		    isa => 'ArrayRef[Int]', # [numerator, denominator]
+		    is => 'rw',
+		    required => 0,
+		   );
+
+has r_n_d => (	      # numerator and denom of agmr between mat & pat.
+	      isa => 'ArrayRef[Int]', # [numerator, denominator]
+	      is => 'rw',
+	      required => 0,
+	     );
+
+has m_rand_info => ( # replace maternal parent with random accession from data set.
+		    isa => 'ArrayRef[Int]', # [n_less, n_total]
+		    is => 'rw',
+		    default => sub { [0, 0] },
+		   );
+
+has p_rand_info => ( # replace paternal parent with random accession from data set.
+		    isa => 'ArrayRef[Int]', # [n_less, n_total]
+		    is => 'rw',
+		    default => sub { [0, 0] },
+		   );
 
 has N00x => (
 	     isa => 'ArrayRef[Int]',
@@ -181,11 +223,6 @@ has NX => (
 sub BUILD{
   my $self = shift;
 
-#  $self->triple_counts_18();
-
-#  $self->nX($nxyzs[18]);
-
-
   $self->triple_counts_27();
   my @Nxyzs = @{$self->Nxyzs()};
 
@@ -221,9 +258,9 @@ sub BUILD{
 
   $self->NX($Nxyzs[27]);
 
-  $self->nxyzs(
-	       [ $Nxyzs[0],  $Nxyzs[1],  $Nxyzs[2],
-		 $Nxyzs[3] + $Nxyzs[9],  $Nxyzs[4] + $Nxyzs[10],  $Nxyzs[5] + $Nxyzs[11],
+  $self->nxyzs(	    # not distinguishing maternal and paternal parents
+	       [ $Nxyzs[0],  $Nxyzs[1],  $Nxyzs[2], # n000 = N000
+		 $Nxyzs[3] + $Nxyzs[9],  $Nxyzs[4] + $Nxyzs[10],  $Nxyzs[5] + $Nxyzs[11], # N010 + N100, 
 		 $Nxyzs[6] + $Nxyzs[18],  $Nxyzs[7] + $Nxyzs[19],  $Nxyzs[8] + $Nxyzs[20],
 		 $Nxyzs[12],  $Nxyzs[13],  $Nxyzs[14],
 		 $Nxyzs[15] + $Nxyzs[21],  $Nxyzs[16] + $Nxyzs[22],  $Nxyzs[17] + $Nxyzs[23],
@@ -231,7 +268,7 @@ sub BUILD{
 		 $Nxyzs[27] ]
 	      );
 
-    my @nxyzs = @{$self->nxyzs()}; # e.g. @nxyzs[0..2] = (n000, n001, n002)
+  my @nxyzs = @{$self->nxyzs()}; # e.g. @nxyzs[0..2] = (n000, n001, n002)
 
   my @n00xs = (@nxyzs[0..2], sum(@nxyzs[0..2]));
   $self->n00x(\@n00xs);
@@ -252,8 +289,30 @@ sub BUILD{
   $self->n22x(\@n22xs);
 
   $self->nX($Nxyzs[27]);
-  
-  $self->distances();
+
+
+  $self->mxyzs(
+	       [ $Nxyzs[0] + $Nxyzs[26], # m000 = N000 + N222
+		 $Nxyzs[1] + $Nxyzs[25], # m001 = N001 + N221
+		 $Nxyzs[2] + $Nxyzs[24],
+		 $Nxyzs[3] + $Nxyzs[23],
+		 $Nxyzs[4] + $Nxyzs[22], # m010 = N010 + n100
+		 $Nxyzs[5] + $Nxyzs[21],
+		 $Nxyzs[6] + $Nxyzs[20],
+		 $Nxyzs[7] + $Nxyzs[19],
+		 $Nxyzs[8] + $Nxyzs[18],
+		 $Nxyzs[9] + $Nxyzs[17],
+		 $Nxyzs[10] + $Nxyzs[16],
+		 $Nxyzs[11] + $Nxyzs[15],
+		 $Nxyzs[12] + $Nxyzs[14],
+		 $Nxyzs[13],
+		 $Nxyzs[27] ]
+	      );
+
+  my $r_num = sum(@Nxyzs[1,4,7,19,22,25]);
+  my $r_denom = sum(@Nxyzs[0,3,6,20,23,26]) + $r_num;
+  $self->r_n_d([$r_num, $r_denom]);
+  #  $self->distances();
 }
 
 sub as_string_ns{
@@ -267,9 +326,9 @@ sub as_string_ns{
   $the_string .= sprintf("%2i %2i %2i %2i   ", @{$self->n22x()});
   $the_string .= sprintf("%2i", $self->nX());
 
-  $the_string .= sprintf("  %7.5f %7.5f", @{$self->am_distances()});
-  $the_string .= sprintf("  %7.5f %7.5f", @{$self->ap_distances()});
-  $the_string .= sprintf("  %7.5f %7.5f", @{$self->mp_distances()});
+  # $the_string .= sprintf("  %7.5f %7.5f", @{$self->am_distances()});
+  # $the_string .= sprintf("  %7.5f %7.5f", @{$self->ap_distances()});
+  # $the_string .= sprintf("  %7.5f %7.5f", @{$self->mp_distances()});
   return $the_string;
 }
 
@@ -280,7 +339,7 @@ sub as_string_Ns{
   $the_string .= sprintf("%2i %2i %2i %2i   ", @{$self->N01x()});
   $the_string .= sprintf("%2i %2i %2i %2i   ", @{$self->N02x()});
 
-   $the_string .= sprintf("%2i %2i %2i %2i   ", @{$self->N10x()});
+  $the_string .= sprintf("%2i %2i %2i %2i   ", @{$self->N10x()});
   $the_string .= sprintf("%2i %2i %2i %2i   ", @{$self->N11x()});
   $the_string .= sprintf("%2i %2i %2i %2i   ", @{$self->N12x()});
 
@@ -290,13 +349,23 @@ sub as_string_Ns{
 
   $the_string .= sprintf("%2i", $self->NX());
 
-  $the_string .= sprintf("  %7.5f %7.5f", @{$self->am_distances()});
-  $the_string .= sprintf("  %7.5f %7.5f", @{$self->ap_distances()});
-  $the_string .= sprintf("  %7.5f %7.5f", @{$self->mp_distances()});
+  # $the_string .= sprintf("  %7.5f %7.5f", @{$self->am_distances()});
+  # $the_string .= sprintf("  %7.5f %7.5f", @{$self->ap_distances()});
+  # $the_string .= sprintf("  %7.5f %7.5f", @{$self->mp_distances()});
+
+  $the_string .= sprintf("   %5i %5i  %7.5f   %5i %5i  %7.5f", @{$self->m_hgmr_n_d()}, $self->m_hgmr(), @{$self->p_hgmr_n_d()}, $self->p_hgmr());
+  $the_string .= sprintf("   %5i %5i  %7.5f", @{$self->mp_agmr_n_d()}, $self->mp_agmr());
+  
   return $the_string;
 }
 
-
+sub as_string{
+  my $self = shift;
+  my $the_string = sprintf("%s %s %s %s  ", $self->acc_gtsobj()->id(),  $self->acc_gtsobj()->quality_counts(), $self->mat_gtsobj()->id(), $self->pat_gtsobj->id());
+  $the_string .= sprintf("%6.4f %6.4f %6.4f %6.4f  ", $self->m_hgmr(), $self->p_hgmr(), $self->mp_agmr(), $self->r());
+  $the_string .= sprintf("%2i %2i %2i %2i ", @{$self->m_rand_info()}, @{$self->p_rand_info()});
+  return $the_string;
+}
 
 sub as_string_xs{
   my $self = shift;
@@ -311,7 +380,7 @@ sub as_string_xs{
   return $the_string;
 }
 
-sub as_string_zs{		# lump together n001 n221, etc.
+sub as_string_z{		# lump together n001 n221, etc.
   my $self = shift;
   my $the_string = sprintf("%s %s %s  ", $self->acc_gtsobj->id(), $self->mat_gtsobj->id(), $self->pat_gtsobj->id());
 
@@ -329,88 +398,103 @@ sub as_string_zs{		# lump together n001 n221, etc.
   return $the_string;
 }
 
-sub triple_counts_18{   # given mat, pat, child gts, get n000, n001, etc.
+sub triple_counts_27{ # get n000, n001, for the pedigree etc.
   my $self = shift;
-  my $mat_gts = $self->mat_gtsobj();
-  my $pat_gts = $self->pat_gtsobj();
-  my $child_gts = $self->acc_gtsobj();
 
-  my %n_c = ('000' => 0, '001' => 0, '002' => 0,   '010' => 0, '011' => 0, '012' => 0,
-	     '020' => 0, '021' => 0, '022' => 0,   '110' => 0, '111' => 0, '112' => 0,
-	     '120' => 0, '121' => 0, '122' => 0,   '220' => 0, '221' => 0, '222' => 0,
-	     'X' => 0);
- 
-  my @m_gts = split("", $mat_gts->genotypes());
-  my @p_gts = split("", $pat_gts->genotypes());
-  my @ch_gts = split("", $child_gts->genotypes());
-  die "gt string length prob. \n" if (scalar @m_gts != scalar @p_gts  or  scalar @m_gts != scalar @ch_gts);
-  #  die "gt string length prob. " . length $mat_gts . " " . length $pat_gts . " " . length $child_gts . "\n"
-  #    if (length $mat_gts != length $pat_gts  or  length $mat_gts != length $child_gts);
-
-  #  for (my $i = 0; $i < length $mat_gts; $i++) {
-  while (my($i, $c) = each @ch_gts) {
-    my $m = $m_gts[$i];
-    my $p = $p_gts[$i];
-    my $tr;			# e.g. '001'
-    #    print STDERR "$c  $m $p  $tr \n";
-    #   $tr .= $c;
-    if (uc $c eq 'X'  or  uc $m eq 'X'  or  uc $p eq 'X') { # missing data case
-      $tr = 'X';
-    } else {			# all 3 gts present. 
-      $tr = ($m < $p)? "$m$p$c" : "$p$m$c";
-    }
-    $n_c{$tr}++;
+  my $mat_gtstr = $self->mat_gtsobj()->genotypes01234();
+  my $pat_gtstr = $self->pat_gtsobj()->genotypes01234();
+  my $acc_gtstr = $self->acc_gtsobj()->genotypes01234();
+  $mat_gtstr =~ s/4/3/g;
+  $pat_gtstr =~ s/4/3/g;
+  $acc_gtstr =~ s/4/3/g;
+  if (length $mat_gtstr != length $acc_gtstr  or  length $pat_gtstr != length $acc_gtstr) {
+    print STDERR "genotype string lengths (should all be equal): ",
+      length $mat_gtstr, "  ", length $pat_gtstr, "  ", length $acc_gtstr, "\n";
+    die "in PedigreeCheck gt string length prob. \n";
   }
-  my @nxyzs = ($n_c{'000'}, $n_c{'001'}, $n_c{'002'},
-	       $n_c{'010'}, $n_c{'011'}, $n_c{'012'},
-	       $n_c{'020'}, $n_c{'021'}, $n_c{'022'},
-	       $n_c{'110'}, $n_c{'111'}, $n_c{'112'},
-	       $n_c{'120'}, $n_c{'121'}, $n_c{'122'},
-	       $n_c{'220'}, $n_c{'221'}, $n_c{'222'}, $n_c{'X'}); #, scalar @ch_gts);
-  die if(scalar @ch_gts != sum(@nxyzs));
-  $self->nxyzs(\@nxyzs);
-  # return \@nxyzs;
+
+  my @tcs = (0) x 64;
+  for my $i (0 .. (length $acc_gtstr) - 1) {
+    my $m = substr($mat_gtstr, $i, 1);
+    my $p = substr($pat_gtstr, $i, 1);
+    my $c = substr($acc_gtstr, $i, 1);
+    $tcs[16*$m + 4*$p + $c]++;
+  }	     # end loop over gts in $acc_gtstr, $mat_gtstr, $pat_gtstr.
+
+  my ($mp_agmr_numerator, $mp_agmr_denominator) = (0, 0);
+  my ($m_hgmr_numerator, $m_hgmr_denominator) = (0, 0);
+  my ($p_hgmr_numerator, $p_hgmr_denominator) = (0, 0);
+  my @triplecounts_27 = (0) x 28;
+  for my $i (0..3) {
+    my $i16 = 16*$i;
+    for my $j (0..3) {
+      my $j4 = 4*$j;
+      for my $k (0..3) {
+	my $tcount = $tcs[$i16 + $j4 + $k];
+	if ($i <= 2  and $j <= 2  and  $k <= 2) {
+	  $triplecounts_27[9*$i + 3*$j + $k] = $tcount;
+	}
+	if ($i <= 2 and $k <= 2) { # mat and acc ok
+	  if ($i != 1  and  $k != 1) {
+	    $m_hgmr_denominator += $tcount;
+	    $m_hgmr_numerator += $tcount if($i != $k);
+	  }
+	}
+	if ($j <= 2 and $k <= 2) { # pat and acc ok
+	  if ($j != 1  and  $k != 1) {
+	    $p_hgmr_denominator += $tcount;
+	    $p_hgmr_numerator += $tcount if($j != $k);
+	  }
+	}
+	if ($i <= 2 and $j <= 2) { # mat and pat ok
+	  $mp_agmr_denominator += $tcount;
+	  $mp_agmr_numerator += $tcount if($i != $j);
+	}
+      }
+    }
+  }
+
+  my $nX = sum(@tcs) - sum(@triplecounts_27);
+  $triplecounts_27[27] = $nX;
+  $self->Nxyzs( \@triplecounts_27 );
+
+  if ( length $acc_gtstr != sum(@{$self->Nxyzs()}) ) {
+    print STDERR $self->acc_gtsobj()->id(), "  ", length $acc_gtstr, "  ";
+    while (my ($trip, $c) = each @{$self->Nxyzs()}) {
+      printf( STDERR  "%3i %3i  ", $trip, $c);
+    }
+    print STDERR "\n";
+    die;
+  }
+
+  $self->m_hgmr_n_d( [$m_hgmr_numerator, $m_hgmr_denominator] );
+  $self->p_hgmr_n_d( [$p_hgmr_numerator, $p_hgmr_denominator] );
+  $self->mp_agmr_n_d( [$mp_agmr_numerator, $mp_agmr_denominator] );
 }
 
-sub triple_counts_27{ # given mat, pat, child gts, get n000, n001, etc.
+
+sub m_hgmr{
   my $self = shift;
-  my $mat_gts = $self->mat_gtsobj();
-  my $pat_gts = $self->pat_gtsobj();
-  my $child_gts = $self->acc_gtsobj();
+  my $nandd = $self->m_hgmr_n_d();
+return ($nandd->[1] > 0)? $nandd->[0]/$nandd->[1] : -1;
+}
 
-  my %n_c = ('000' => 0, '001' => 0, '002' => 0,   '010' => 0, '011' => 0, '012' => 0,   '020' => 0, '021' => 0, '022' => 0,
-	     '100' => 0, '101' => 0, '102' => 0,   '110' => 0, '111' => 0, '112' => 0,   '120' => 0, '121' => 0, '122' => 0,
-	     '200' => 0, '201' => 0, '202' => 0,   '210' => 0, '211' => 0, '212' => 0,   '220' => 0, '221' => 0, '222' => 0,
-	     'X' => 0);
- 
-  my @m_gts = split("", $mat_gts->genotypes());
-  my @p_gts = split("", $pat_gts->genotypes());
-  my @ch_gts = split("", $child_gts->genotypes());
-  die "gt string length prob. \n" if (scalar @m_gts != scalar @p_gts  or  scalar @m_gts != scalar @ch_gts);
-  #  die "gt string length prob. " . length $mat_gts . " " . length $pat_gts . " " . length $child_gts . "\n"
-  #    if (length $mat_gts != length $pat_gts  or  length $mat_gts != length $child_gts);
-
-  #  for (my $i = 0; $i < length $mat_gts; $i++) {
-  while (my($i, $c) = each @ch_gts) {
-    my $m = $m_gts[$i];
-    my $p = $p_gts[$i];
-    my $tr;			# e.g. '001'
-    #    print STDERR "$c  $m $p  $tr \n";
-    #   $tr .= $c;
-    if (uc $c eq 'X'  or  uc $m eq 'X'  or  uc $p eq 'X') { # missing data case
-      $tr = 'X';
-    } else {			# all 3 gts present. 
-      $tr = "$m$p$c";
-    }
-    $n_c{$tr}++;
+  sub p_hgmr{
+    my $self = shift;
+    my $nandd = $self->p_hgmr_n_d();
+    return ($nandd->[1] > 0)? $nandd->[0]/$nandd->[1] : -1;
   }
-  my @Nxyzs = ($n_c{'000'}, $n_c{'001'}, $n_c{'002'},   $n_c{'010'}, $n_c{'011'}, $n_c{'012'},   $n_c{'020'}, $n_c{'021'}, $n_c{'022'},
-	       $n_c{'100'}, $n_c{'101'}, $n_c{'102'},   $n_c{'110'}, $n_c{'111'}, $n_c{'112'},   $n_c{'120'}, $n_c{'121'}, $n_c{'122'},
-	       $n_c{'200'}, $n_c{'201'}, $n_c{'202'},   $n_c{'210'}, $n_c{'211'}, $n_c{'212'},   $n_c{'220'}, $n_c{'221'}, $n_c{'222'},
-	       $n_c{'X'});	#, scalar @ch_gts);
-  die if(scalar @ch_gts != sum(@Nxyzs));
-  $self->Nxyzs(\@Nxyzs);
-  # return \@nxyzs;
+
+sub mp_agmr{
+  my $self = shift;
+  my $nandd = $self->mp_agmr_n_d();
+  return ($nandd->[1] > 0)? $nandd->[0]/$nandd->[1] : -1;
+}
+
+sub r{
+  my $self = shift;
+  my $nandd = $self->r_n_d();
+  return  ($nandd->[1] > 0)? $nandd->[0]/$nandd->[1] : -1;
 }
 
 sub distances{
@@ -424,10 +508,10 @@ sub distances{
 }
 
 sub compare_to_random_parents{ 
-  my $self = shift; # PedigreeCheck obj.
+  my $self = shift;		 # PedigreeCheck obj.
   my $id_genotypestring = shift; # keys: ids, values: genotype string
   my $ped_7tfs = shift;	 # seven triple frequency for pedigree parents
-#  my $offspring_gts = shift;	# 'offspring' genotype string
+  #  my $offspring_gts = shift;	# 'offspring' genotype string
   my $parent1_gts = shift; # use this as one 'parent' together with a randomly chosen one, or 'undef' to get both parents randomly chosen.
   my $n_random = shift;
 
@@ -442,7 +526,7 @@ sub compare_to_random_parents{
     my $parent2_gts = $id_genotypestring->{$ids[int(rand(scalar @ids))]};
     my $xyz_counts =  nxxxs($parent1_gts, $parent2_gts, $offspring_gts);
     my @stfsr = seven_triple_frequencies(@$xyz_counts);
-    my $xX = pop @stfsr; # 
+    my $xX = pop @stfsr;	# 
     while (my($i, $f) = each @stfsr) {
       push @{$stfars[$i]}, $f if($f >= 0); #
     }
@@ -459,7 +543,7 @@ sub compare_to_random_parents{
     $i5pct = int(0.05*$nok - 0.01);
     my @sorted_stfs = sort {$a <=> $b} @$stfar;
     $fivepctstr .= '  '. ($nok > 0)? sprintf("%7.5f ", $sorted_stfs[$i5pct]) : "-1 ";
- #  $fivepctstr .= '  '. sprintf("[%7.5f %7.5f %7.5f] ", $sorted_stfs[0], $sorted_stfs[$n_random-1],  $sorted_stfs[$i5pct]);
+    #  $fivepctstr .= '  '. sprintf("[%7.5f %7.5f %7.5f] ", $sorted_stfs[0], $sorted_stfs[$n_random-1],  $sorted_stfs[$i5pct]);
   }
 
   return ($nlessstr, $fivepctstr);
@@ -507,7 +591,7 @@ sub seven_triple_freqs{ # x001, x002, x012, x02x, x120, x220, x221. x001 = n001/
 }
 
 sub nxxxs{	     # given mat, pat, child gts, get n000, n001, etc.
-  my $mat_gts = shift; # genotypes string
+  my $mat_gts = shift;		# genotypes string
   my $pat_gts = shift;
   my $child_gts = shift;
 
@@ -527,12 +611,12 @@ sub nxxxs{	     # given mat, pat, child gts, get n000, n001, etc.
   while (my($i, $c) = each @ch_gts) {
     my $m = $m_gts[$i];
     my $p = $p_gts[$i];
-      my $tr; 
+    my $tr; 
     #    print STDERR "$c  $m $p  $tr \n";
     #   $tr .= $c;
-    if($c eq 'X'  or  $m eq 'X'  or  $p eq 'X'){ # missing data case
+    if ($c eq 'X'  or  $m eq 'X'  or  $p eq 'X') { # missing data case
       $tr = 'X';
-    }else{ # all 3 gts present. 
+    } else {			# all 3 gts present. 
       $tr = ($m < $p)? "$m$p$c" : "$p$m$c";
     }
     $n_c{$tr}++;
