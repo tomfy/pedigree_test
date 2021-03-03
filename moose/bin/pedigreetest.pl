@@ -23,7 +23,7 @@ use CheckPedigrees;
 
 my $gtfilename = undef;
 my $pedigree_filename = undef;
-my $delta = 0.25;
+my $delta = 0.25; # real-number genotypes are rounded to nearest integer (0,1,2) if within +- $delta
 my $max_bad_gt_fraction = 1.0;
 my $min_hw_qual_param = 0.0;
  GetOptions(
@@ -39,12 +39,13 @@ die "No genotypes matrix filename provided.\n" if(!defined $gtfilename);
 print STDERR "# Read in the gts matrix file. Create GenotypesSet object.\n";
 my $gtset = GenotypesSet->new({gt_matrix_filename => $gtfilename, delta => $delta});
 print STDERR "# GenotypesSet object created.\n";
-
+#exit;
 #print $gtset->as_string(), "\n";
 print STDERR "# ", $gtset->marker_qual_string(), "\n";
 #exit;
 # print $gtset->gt_set_as_string(), "\n";
-if( ($max_bad_gt_fraction < 1.0) or ($min_hs_qual_param > 0.0) ){
+if( ($max_bad_gt_fraction < 1.0) or ($min_hw_qual_param > 0.0) ){
+  print STDERR "# removing bad markers. max bad fraction: $max_bad_gt_fraction   min hw qual: $min_hw_qual_param \n";
   $gtset->remove_bad_markers($max_bad_gt_fraction, $min_hw_qual_param);
 }
 print STDERR "# Create pedigrees object from file.\n";
@@ -54,5 +55,5 @@ print STDERR "# Pedigrees object created.\n";
 print STDERR "# Create CheckPedigrees object.\n";
 my $check_peds = CheckPedigrees->new({genotypes_set => $gtset, pedigrees => $pedigrees});
 print STDERR "# PedigreeChecks object created.\n";
-print $check_peds->as_string_Ns();
+print $check_peds->as_string();
 #print $check_peds->as_string_zs();
