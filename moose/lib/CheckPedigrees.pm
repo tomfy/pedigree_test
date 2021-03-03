@@ -62,7 +62,7 @@ sub BUILD{
   my $peds = $self->pedigrees();
   my $accid_parents = $peds->accid_parents();
 
-  my $n_done = 0;
+  my $n_pedigree_checks = 0;
   while (my($accid, $accgtobj) = each %$accid_gts) {
 
     my ($matid, $patid) = $peds->parents($accid); # [matid, patid] if defined
@@ -75,7 +75,11 @@ sub BUILD{
     next if (!defined $patgtobj);
 
     $self->pedigree_checks()->{$accid} = PedigreeCheck->new({ mat_gtsobj => $matgtobj, pat_gtsobj => $patgtobj, acc_gtsobj => $accgtobj } );
-      #_get_a_pedcheck($accid_gts, $matid, $patid, $accid);
+    $n_pedigree_checks++;
+    if($n_pedigree_checks % 100 == 0){
+      print STDERR "# n pedigree checks created: $n_pedigree_checks \n";
+    }
+    #_get_a_pedcheck($accid_gts, $matid, $patid, $accid);
 
   #  $self->matrand_checks()->{$accid} = _get_a_pedcheck($accid_gts, $matid, $accids[int(rand(@accids))], $accid);
 
@@ -85,6 +89,22 @@ sub BUILD{
 
     # print $pedcheck->as_string(), "\n";
   }
+}
+
+sub as_string{
+  my $self = shift;
+   my $gtsetobj = $self->genotypes_set();
+  my $the_string = '';
+  $the_string .= "#n_accessions: " . $gtsetobj->n_accessions() . "\n";
+  $the_string .= "#n_markers: " . $gtsetobj->n_markers() . "\n";
+  $the_string .= "#delta: " . $gtsetobj->delta() . "\n";
+
+  while (my ($accid, $pedchk) = each %{$self->pedigree_checks()}) {
+ #   my $gtsobj = $gtsetobj->accid_genotypes()->{$accid};
+#    $the_string .= $accid . "  " . $gtsobj->quality_counts() . "  ";
+    $the_string .= $pedchk->as_string() . "\n";
+  }
+  return $the_string;
 }
 
 
