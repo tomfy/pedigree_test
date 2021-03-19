@@ -66,7 +66,25 @@ has accid_genotypes => (		  #
 			default => sub { {} },
 		       );
 
-has gt_set_as_string => (
+has accid_allgenotypes => (		  # 
+			isa => 'HashRef', # values are Genotypes objects
+			is => 'rw',
+			default => sub { {} },
+		       );
+
+has max_bad_gt_fraction => (
+		    isa => 'Num',
+		    is => 'rw',
+		    default => 1,
+		   );
+
+has accid_goodgenotypes => (		  # 
+			isa => 'HashRef', # values are Genotypes objects
+			is => 'rw',
+			default => sub { {} },
+		       );
+
+has gt_set_as_01234string => ( # 01234
 			 isa => 'Str',
 			 is => 'rw',
 			 default => '',
@@ -103,21 +121,19 @@ sub BUILD {
     #   print STDERR "acc id: [$acc_id] \n";
     next if (scalar @gts == 0);
     my ($s01234, $q_counts_str) = $self->resolve_to_01234(\@gts);
-    my $s012Xx = $s01234;
-    $s012Xx =~ s/3/X/g;
-    $s012Xx =~ s/4/x/g;
-    $out_string_012Xx .= "$acc_id $s012Xx\n"; 
 
-    die if(length $s012Xx != $n_markers);
+
+    die if(length $s01234 != $n_markers);
     $id_gts{$acc_id} = Genotypes->new({id => $acc_id, genotypes => $s01234, quality_counts => $q_counts_str});
     $accessions_read++;
-    print STDERR "# accessions read: $accessions_read \n" if(($accessions_read % 100) == 0);
+    print STDERR "# accessions read: $accessions_read \n" if(($accessions_read % 200) == 0);
   }
   $self->n_accessions(scalar keys %id_gts);
   $self->accession_ids(\@acc_ids);
   $self->n_markers($n_markers);
-  $self->accid_genotypes(\%id_gts);
-  $self->gt_set_as_string($out_string_012Xx);
+  $self->accid_allgenotypes(\%id_gts);
+  $self->accid_genotypes($self->accid_allgenotypes());
+  #$self->gt_set_as_string($out_string_012Xx);
 }
 
 sub resolve_to_01234{ # take gts which are non-integers in range [0,2], and round to 0, 1, 2, (or X if not withing delta of 0, 1, or 2)
@@ -175,12 +191,13 @@ sub increment_marker_gt_counts{
 
 sub as_string{
   my $self = shift;
+  my $X = shift // 0; # default is 01234; call with $X = 1 to get 012Xx
   my @marker_ids =  @{$self->marker_ids()};
-  my $s = "delta: " . $self->delta() . "\n";
+  my $s = "# delta: " . $self->delta() . "\n";
   $s .= "MARKER " . join(" ", @marker_ids) . "\n";
   my @count_labels = ('n0', 'n1', 'n2', 'nX', 'nx');
   for my $j (0..4) {
-    $s .= $count_labels[$j] . " ";
+    $s .= "# " . $count_labels[$j] . " ";
     #for my $mid (@marker_ids) {
     while (my($i, $mid) = each @marker_ids) {
       #    $s .= sprintf(" %1i", $self->markerid_marker()->{$mid}->counts()->[$j] // 0);
@@ -192,7 +209,12 @@ sub as_string{
   #while (my ($accid, $gtsobj) = each %{$self->accid_genotypes()}) {
   for my $acc_id (@{$self->accession_ids()}) {
     my $gtsobj = $self->accid_genotypes()->{$acc_id};
-    $s .= $gtsobj->as_string . "\n";
+    my $gtstr = $gtsobj->as_string();
+  #   if($X){
+  #   $gtstr =~ s/3/X/g;
+  #   $gtstr =~ s/4/x/g;
+  # }#
+    $s .= $gtstr . "\n";
   }
   return $s;
 }
@@ -217,7 +239,7 @@ sub marker_qual_string{
   return $s;
 }
 
-sub remove_bad_markers{
+sub clean_marker_set{
   my $self = shift;
   my $max_bad_gt_fraction = shift;
   my $min_hw_qual_param = shift;
@@ -241,9 +263,15 @@ sub remove_bad_markers{
   $self->n_markers(scalar @good_marker_ids);
   $self->marker_ids(\@good_marker_ids);
 
-  while ( my($accid, $gtsobj) = each %{$self->accid_genotypes()}) {
-    $gtsobj->remove_bad_markers(\@marker_thumbsupdown);
+  my @accids =  keys %{$self->accid_genotypes()};
+  $self->max_bad_gt_fraction($max_bad_gt_fraction);
+  for my $accid (@accids){
+    my $gtsobj = $self->accid_genotypes()->{$accid};
+    my $cleaned_gtsobj = $gtsobj->construct_cleaned_genotypes_object(\@marker_thumbsupdown);
+  #  $gtsobj->remove_bad_markers(\@marker_thumbsupdown);
+    $self->accid_goodgenotypes()->{$accid} = $cleaned_gtsobj;
   }
+  $self->accid_genotypes($self->accid_goodgenotypes());
 }
 
 ######### non-methods ##################
