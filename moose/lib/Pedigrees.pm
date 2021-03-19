@@ -9,6 +9,7 @@ use Scalar::Util qw (looks_like_number );
 use List::Util qw ( min max sum );
 use POSIX qw ( floor ceil );
 use Genotypes;
+use Node;
 
 has pedigree_filename => (
 			  isa => 'Str',
@@ -22,6 +23,18 @@ has accid_parents => (
 		      default => sub{ {} },
 		     );
 
+has id_pedigree => (
+		    isa => 'HashRef',
+		    is => 'rw',
+		    default => sub{ {} },
+		   );
+
+has id_node => (
+		isa => 'HashRef', # keys are accession ids, values are Node objects.
+		is => 'rw',
+		default => sub{ {} },
+	       );
+
 sub BUILD{
   my $self = shift;
   my $pedigree_filename = $self->pedigree_filename();
@@ -33,6 +46,16 @@ sub BUILD{
   while (my $line = <$fh>) {
     my @cols = split(" ", $line);
     my ($accid, $matid, $patid) = @cols[-3, -2, -1];
+
+    my $matnode = ($matid eq 'NA')? undef : ( $self->id_node()->{$matid} // Node->new({id => $matid}) );
+    my $patnode = ($patid eq 'NA')? undef : ( $self->id_node()->{$patid} // Node->new({id => $patid}) );
+    my $anode = $self->id_node()->{$accid} // Node->new({id => $accid});
+    $anode->female_parent( $matnode );
+    $anode->male_parent( $patnode );
+    $matnode->add_offspring( $accid ) if(defined $matnode);
+    $patnode->add_offspring( $accid ) if(defined $patnode);
+    $self->id_node()->{$accid} = $anode;
+
     next if($accid eq 'NA'  or  $matid eq 'NA'  or $patid eq 'NA'); # only store if both parents given.
     # print "$accid $matid $patid \n";
     my $parental_idpair = [$matid, $patid]; # PedigreeTest::order_idpair($matid, $patid);
@@ -46,6 +69,19 @@ sub parents{
   my $accid = shift;
   my $parents = $self->accid_parents()->{$accid} // undef;
   return (defined $parents)? @$parents : (undef, undef);
+}
+
+sub as_string{
+  my $self = shift;
+  my $string = '';
+  my @ids = sort keys %{$self->id_node()};
+  for my $id (@ids) {
+    my $node = $self->id_node()->{$id};
+    my ($nwck, $mind, $maxd) = $node->as_newick();
+    my @offspring_array = split(" ", $node->offspring());
+    $string .= "$id  $mind $maxd   $nwck  " . scalar @offspring_array . "\n";
+  }
+  return $string;
 }
 
 1;
