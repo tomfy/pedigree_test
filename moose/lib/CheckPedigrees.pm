@@ -16,16 +16,28 @@ use PedigreeCheck;
 # accession id and string of genotypes
 
 has genotypes_set => (
-		     isa => 'Object',
-		     is => 'ro',
-		     required => 1,
-		    );
+		      isa => 'Object',
+		      is => 'ro',
+		      required => 1,
+		     );
 
 has pedigrees => (
 		  isa =>  'Object',
 		  is => 'ro',
 		  required => 1,
 		 );
+
+has n_random_parents => (
+		 isa => 'Int',
+		 is => 'ro',
+		 default => 0,
+			);
+
+has summary_filename => (
+			 isa => 'Str',
+			 is => 'ro',
+			 default => 'summary',
+			 );
 
 has pedigree_checks => (
 			isa => 'HashRef',
@@ -54,59 +66,74 @@ has randrand_checks => (
 sub BUILD{
   my $self = shift;
 
-  my $accid_gts = $self->genotypes_set()->accid_genotypes(); # values are Genotypes objects
-  my @accids = keys %$accid_gts;
-  # while (my($accid, $gtobj) = each %$accid_gts) {
-  #   print STDERR "$accid  ", $gtobj->id(), "\n";
-  # }
+  my $gtsetobj = $self->genotypes_set();
+  my $accid_gts = $gtsetobj->accid_genotypes(); # values are Genotypes objects
+
   my $peds = $self->pedigrees();
   my $accid_parents = $peds->accid_parents();
 
   my $n_pedigree_checks = 0;
-  while (my($accid, $accgtobj) = each %$accid_gts) {
+  print STDERR "# n accessions: ", $gtsetobj->n_accessions(), "\n";
+  my $summary_filename = $self->summary_filename();
+  open my $fhsummary, ">", "$summary_filename";
+  print $fhsummary "# n_accessions: " . $gtsetobj->n_accessions() . "\n";
+  print $fhsummary "# delta: " . $gtsetobj->delta() . "\n";
+  print $fhsummary "# n_markers: " . $gtsetobj->n_markers() . "\n";
 
+  my @accession_ids = sort keys %$accid_gts;
+  for my $accid (@accession_ids){
+    my $accgtobj = $accid_gts->{$accid};
     my ($matid, $patid) = $peds->parents($accid); # [matid, patid] if defined
-    #   print STDERR "[$matid] [$patid] \n";
-    next if(!defined $matid);
+    next if(!defined $matid  or  !defined $patid);
 
     my $matgtobj = $accid_gts->{$matid} // undef;
     next if (!defined $matgtobj);
     my $patgtobj = $accid_gts->{$patid} // undef;
     next if (!defined $patgtobj);
-
-    $self->pedigree_checks()->{$accid} = PedigreeCheck->new({ mat_gtsobj => $matgtobj, pat_gtsobj => $patgtobj, acc_gtsobj => $accgtobj } );
+    my $pedcheck = PedigreeCheck->new({ mat_gtsobj => $matgtobj, pat_gtsobj => $patgtobj, acc_gtsobj => $accgtobj, n_random_parents => $self->n_random_parents() } );
+    #print STDERR "n_random_parents:  ", $self->n_random_parents(), "\n";
+    $self->pedigree_checks()->{$accid} = $pedcheck;
+    $pedcheck->compare_to_random_parents($accid_gts);
+    print $fhsummary $pedcheck->as_string(), "\n";
     $n_pedigree_checks++;
-    if($n_pedigree_checks % 100 == 0){
+    if ($n_pedigree_checks % 200 == 0) {
       print STDERR "# n pedigree checks created: $n_pedigree_checks \n";
     }
-    #_get_a_pedcheck($accid_gts, $matid, $patid, $accid);
-
-  #  $self->matrand_checks()->{$accid} = _get_a_pedcheck($accid_gts, $matid, $accids[int(rand(@accids))], $accid);
-
-  #  $self->patrand_checks()->{$accid} = _get_a_pedcheck($accid_gts, $accids[int(rand(@accids))], $patid, $accid);
-
-  #  $self->randrand_checks()->{$accid} = _get_a_pedcheck($accid_gts, $accids[int(rand(@accids))], $accids[int(rand(@accids))], $accid);
-
-    # print $pedcheck->as_string(), "\n";
   }
 }
 
 sub as_string{
   my $self = shift;
-   my $gtsetobj = $self->genotypes_set();
+  my $gtsetobj = $self->genotypes_set();
   my $the_string = '';
-  $the_string .= "#n_accessions: " . $gtsetobj->n_accessions() . "\n";
-  $the_string .= "#n_markers: " . $gtsetobj->n_markers() . "\n";
-  $the_string .= "#delta: " . $gtsetobj->delta() . "\n";
+  $the_string .= "# n_accessions: " . $gtsetobj->n_accessions() . "\n";
+  $the_string .= "# n_markers: " . $gtsetobj->n_markers() . "\n";
+  $the_string .= "# delta: " . $gtsetobj->delta() . "\n";
 
   while (my ($accid, $pedchk) = each %{$self->pedigree_checks()}) {
- #   my $gtsobj = $gtsetobj->accid_genotypes()->{$accid};
-#    $the_string .= $accid . "  " . $gtsobj->quality_counts() . "  ";
+    #   my $gtsobj = $gtsetobj->accid_genotypes()->{$accid};
+    #    $the_string .= $accid . "  " . $gtsobj->quality_counts() . "  ";
     $the_string .= $pedchk->as_string() . "\n";
   }
   return $the_string;
 }
 
+# sub print_summary{
+#   my $self = shift;
+#   my $output_filename = shift;
+#   open my $fh, ">", "$output_filename";
+#   my $the_string = "#n_accessions: " . $gtsetobj->n_accessions() . "\n";
+#   $the_string .= "#n_markers: " . $gtsetobj->n_markers() . "\n";
+#   $the_string .= "#delta: " . $gtsetobj->delta() . "\n";
+# print $fh "$the_string";
+#   while (my ($accid, $pedchk) = each %{$self->pedigree_checks()}) {
+#     #   my $gtsobj = $gtsetobj->accid_genotypes()->{$accid};
+#     #    $the_string .= $accid . "  " . $gtsobj->quality_counts() . "  ";
+#     print $fh  $pedchk->as_string(), "\n";
+#   }
+#   close $fh;
+#   #return $the_string;
+# }
 
 
 sub as_string_ns{
@@ -133,10 +160,10 @@ sub as_string_Ns{
   $the_string .= "# n_markers: " . $gtsetobj->n_markers() . "\n";
   $the_string .= "# delta: " . $gtsetobj->delta() . "\n";
 
-#  while (my ($accid, $pedchk) = each %{$self->pedigree_checks()}) {
-    for my $accid (@{$gtsetobj->accession_ids()}){
-      my $gtsobj = $gtsetobj->accid_genotypes()->{$accid};
-      my $pedchk = $self->pedigree_checks()->{$accid} // undef;
+  #  while (my ($accid, $pedchk) = each %{$self->pedigree_checks()}) {
+  for my $accid (@{$gtsetobj->accession_ids()}) {
+    my $gtsobj = $gtsetobj->accid_genotypes()->{$accid};
+    my $pedchk = $self->pedigree_checks()->{$accid} // undef;
     $the_string .= $accid . "  " . $gtsobj->quality_counts() . "  ";
     $the_string .= (defined $pedchk)? $pedchk->as_string_Ns() . "\n" : "  No pedigree \n";
   }
