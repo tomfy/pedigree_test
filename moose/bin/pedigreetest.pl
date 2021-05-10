@@ -18,38 +18,45 @@ use lib $libdir;
 print STDERR "# libdir: $libdir \n";
 
 use GenotypesSet;
-use Pedigrees;
+use PedigreesDAG;
 use CheckPedigrees;
+use Cluster1d;
 
 my $gtfilename = undef;
 my $pedigree_table_filename = undef;
-my $delta = 0.25; # real-number genotypes are rounded to nearest integer (0,1,2) if within +- $delta
+my $delta = 0.05; # real-number genotypes are rounded to nearest integer (0,1,2) if within +- $delta
 my $max_bad_gt_fraction = 1.0;
 my $min_hw_qual_param = 0.0;
 my $n_random_parents = 0;
 my $base_output_filename = 'out';
 my $output_pedigrees = 0;
 my $output_genotype_matrix = 0;
-
+my $output_27triple_counts = 0;
+my $output_14_counts = 0;
+my $checkpedigrees_progress_interval = 500;
+my $genotypeset_progress_interval = 500;
  GetOptions(
 	    'gtsfile|gtfile|genotypesfile=s' => \$gtfilename,
-	    'pedigreefile|pedtable=s' => \$pedigree_table_filename,
+	    'pedigreein|pedigreefile|pedtable=s' => \$pedigree_table_filename,
 	    'delta=f' => \$delta,
 	    'max_bad_gt_fraction=f' => \$max_bad_gt_fraction,
 	    'min_hw_qual=f' => \$min_hw_qual_param,
 	    'n_random_parents=i' => \$n_random_parents,
-	    'out|basename=s' => \$base_output_filename,
-	    'pedout!' => \$output_pedigrees,
-	    'matrixout!' => \$output_genotype_matrix,
+	    'baseout|basename=s' => \$base_output_filename,
+	    'outpedigrees!' => \$output_pedigrees,
+	    'outmatrix!' => \$output_genotype_matrix,
+	    'out27!' => \$output_27triple_counts,
+	    'out14!' => \$output_14_counts,
+
 	   );
 
 die "No genotypes matrix filename provided.\n" if(!defined $gtfilename);
 
 # Read in the pedigree table:
 
-print STDERR "# Creating pedigrees object from file: $pedigree_table_filename\n";
-my $pedigrees = Pedigrees->new({pedigree_filename => $pedigree_table_filename});
-print STDERR "# Pedigrees object created.\n";
+print STDERR "# Creating PedigreesDAG object from file: $pedigree_table_filename\n";
+my $pedigrees = PedigreesDAG->new({pedigree_filename => $pedigree_table_filename});
+print STDERR "# PedigreesDAG object created.\n\n";
 if($output_pedigrees){
   my $pedigree_output_filename = $base_output_filename . '_pedigrees';
   open my $fhout, ">", "$pedigree_output_filename";
@@ -59,14 +66,14 @@ if($output_pedigrees){
 
 # Read in the genotype matrix file 
 
-print STDERR "# Reading in the gts matrix file. Create GenotypesSet object.\n";
-my $gtset = GenotypesSet->new({gt_matrix_filename => $gtfilename, delta => $delta});
-print STDERR "# GenotypesSet object created.\n";
+print STDERR "# Creating GenotypesSet object.\n# Reading in the gts matrix file.\n";
+my $gtset = GenotypesSet->new({gt_matrix_filename => $gtfilename, delta => $delta, max_bad_gt_fraction => $max_bad_gt_fraction, progress_report_interval => $genotypeset_progress_interval});
+print STDERR "# GenotypesSet object created.\n\n";
 
-if( ($max_bad_gt_fraction < 1.0) or ($min_hw_qual_param > 0.0) ){
-  print STDERR "# removing bad markers. max bad fraction: $max_bad_gt_fraction   min hw qual: $min_hw_qual_param \n";
-  $gtset->clean_marker_set($max_bad_gt_fraction, $min_hw_qual_param);
-}
+# if( ($max_bad_gt_fraction < 1.0) or ($min_hw_qual_param > 0.0) ){
+#   print STDERR "# removing bad markers. max bad fraction: $max_bad_gt_fraction   min hw qual: $min_hw_qual_param \n";
+#   $gtset->clean_marker_set($max_bad_gt_fraction, $min_hw_qual_param);
+# }
 
 if($output_genotype_matrix){
   my $gtmatrix_output_filename = $base_output_filename . '_genotypeset';
@@ -77,12 +84,21 @@ if($output_genotype_matrix){
 
 print STDERR "# Create CheckPedigrees object.\n";
 my $summary_output_filename = $base_output_filename . "_summary";
+my $output_filename_27triple_counts = ($output_27triple_counts)? $base_output_filename . "_27" : undef;
+my $output_filename_14counts = ($output_14_counts)? $base_output_filename . "_14" : undef;
 my $check_peds = CheckPedigrees->new({
 				      genotypes_set => $gtset,
 				      pedigrees => $pedigrees,
 				      n_random_parents => $n_random_parents,
 				      summary_filename => $summary_output_filename,
+				      triplecounts27_filename => $output_filename_27triple_counts,
+				      counts14_filename => $output_filename_14counts,
+				      progress_report_interval => $checkpedigrees_progress_interval,
 				     });
 print STDERR "# PedigreeChecks object created.\n";
 
 
+printf("# Female parent - offspring hgmr clusters: n pts: %4i  k-means: %4i %4i %8.5f  kde: %4i %4i %8.5f \n", $check_peds->m_hgmr_cluster());
+printf("#   Male parent - offspring hgmr clusters: n_pts: %4i  k-means: %4i %4i %8.5f  kde: %4i %4i %8.5f \n", $check_peds->p_hgmr_cluster());
+
+$check_peds->categorize();
