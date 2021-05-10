@@ -327,9 +327,10 @@ sub as_string_ns{
   return $the_string;
 }
 
-sub as_string_Ns{
+sub as_string_27{
   my $self = shift;
-  my $the_string = sprintf("%s %s  ", $self->mat_gtsobj->id(), $self->pat_gtsobj->id());
+  #my $the_string = sprintf("%s %s  ", $self->mat_gtsobj->id(), $self->pat_gtsobj->id());
+   my $the_string = sprintf("%s %s %s %s  ", $self->acc_gtsobj()->id(),  $self->acc_gtsobj()->quality_counts(), $self->mat_gtsobj()->id(), $self->pat_gtsobj->id());
   $the_string .= sprintf("%2i %2i %2i %2i   ", @{$self->N00x()});
   $the_string .= sprintf("%2i %2i %2i %2i   ", @{$self->N01x()});
   $the_string .= sprintf("%2i %2i %2i %2i   ", @{$self->N02x()});
@@ -354,11 +355,36 @@ sub as_string_Ns{
   return $the_string;
 }
 
+sub as_string_14{
+  my $self = shift;
+  #my $the_string = sprintf("%s %s  ", $self->mat_gtsobj->id(), $self->pat_gtsobj->id());
+  my $the_string = '';
+  #sprintf("%s %s %s %s  ", $self->acc_gtsobj()->id(),  $self->acc_gtsobj()->quality_counts(), $self->mat_gtsobj()->id(), $self->pat_gtsobj->id());
+
+  my @ms = @{$self->mxyzs()};
+  # $the_string .= sprintf("%2i %2i %2i   ", @ms[0,1,2]);
+  # $the_string .= sprintf("%2i %2i %2i   ", @ms[3,4,5]);
+  # $the_string .= sprintf("%2i %2i %2i   ", @ms[6,7,8]);
+  # $the_string .= sprintf("%2i %2i %2i   ", @ms[9,10,11]);
+  # $the_string .= sprintf("%2i %2i %2i   ", @ms[12,13,14]);
+
+    $the_string .= sprintf("%1i %1i %1i  ", @ms[0,1,2]);
+  $the_string .= sprintf("%1i %1i %1i  ", @ms[3,4,5]);
+  $the_string .= sprintf("%1i %1i %1i  ", @ms[6,7,8]);
+  $the_string .= sprintf("%1i %1i %1i  ", @ms[9,10,11]);
+  $the_string .= sprintf("%1i %1i  %1i  ", @ms[12,13,14]);
+
+#  $the_string .= sprintf("%7.5f   %7.5f   %7.5f", $self->m_hgmr(), $self->p_hgmr(), $self->mp_agmr());
+  return $the_string;
+}
+
+
 sub as_string{
   my $self = shift;
-  my $the_string = sprintf("%s %s %s %s  ", $self->acc_gtsobj()->id(),  $self->acc_gtsobj()->quality_counts(), $self->mat_gtsobj()->id(), $self->pat_gtsobj->id());
-  $the_string .= sprintf("%6.4f %6.4f %6.4f %6.4f %6.4f  ", $self->m_hgmr(), $self->p_hgmr(), $self->mp_agmr(), $self->rx01(), $self->r0x1());
-  $the_string .= sprintf("%2i %2i %2i ", $self->mhgmr_rank(), $self->phgmr_rank(), $self->n_random_parents());
+  my $the_string = sprintf("%s  %s  %s  %s   ", $self->acc_gtsobj()->id(),  $self->acc_gtsobj()->quality_counts(), $self->mat_gtsobj()->id(), $self->pat_gtsobj->id());
+  $the_string .= sprintf("%7.5f %7.5f %7.5f %7.5f %7.5f   ", $self->m_hgmr(), $self->p_hgmr(), $self->mp_agmr(), $self->rx01(), $self->r0x1());
+  $the_string .= $self->as_string_14() . " ";
+   $the_string .= sprintf("%1i %1i %1i", $self->mhgmr_rank(), $self->phgmr_rank(), $self->n_random_parents());
   return $the_string;
 }
 
@@ -417,8 +443,8 @@ sub triple_counts_27{ # get N000, N001, etc. for the pedigree.
   }	     # end loop over gts in $acc_gtstr, $mat_gtstr, $pat_gtstr.
 
   my ($mp_agmr_numerator, $mp_agmr_denominator) = (0, 0);
-  my ($m_hgmr_numerator, $m_hgmr_denominator) = (0, 0);
-  my ($p_hgmr_numerator, $p_hgmr_denominator) = (0, 0);
+  my ($m_hgmr_numerator, $m_hgmr_denominator, $n_amok) = (0, 0, 0);
+  my ($p_hgmr_numerator, $p_hgmr_denominator, $n_pmok) = (0, 0, 0);
   my @triplecounts_27 = (0) x 28;
   for my $i (0..3) {
     my $i16 = 16*$i;
@@ -430,15 +456,17 @@ sub triple_counts_27{ # get N000, N001, etc. for the pedigree.
 	  $triplecounts_27[9*$i + 3*$j + $k] = $tcount;
 	}
 	if ($i <= 2 and $k <= 2) { # mat and acc ok
+	  $n_amok++;
 	  if ($i != 1  and  $k != 1) {
 	    $m_hgmr_denominator += $tcount;
-	    $m_hgmr_numerator += $tcount if($i != $k);
+	    $m_hgmr_numerator += $tcount if($i != $k); # 02 or 20
 	  }
 	}
 	if ($j <= 2 and $k <= 2) { # pat and acc ok
+	  $n_pmok++;
 	  if ($j != 1  and  $k != 1) {
 	    $p_hgmr_denominator += $tcount;
-	    $p_hgmr_numerator += $tcount if($j != $k);
+	    $p_hgmr_numerator += $tcount if($j != $k); # 02 or 20
 	  }
 	}
 	if ($i <= 2 and $j <= 2) { # mat and pat ok
@@ -462,8 +490,8 @@ sub triple_counts_27{ # get N000, N001, etc. for the pedigree.
     die;
   }
 
-  $self->m_hgmr_n_d( [$m_hgmr_numerator, $m_hgmr_denominator] );
-  $self->p_hgmr_n_d( [$p_hgmr_numerator, $p_hgmr_denominator] );
+  $self->m_hgmr_n_d( [$m_hgmr_numerator, $m_hgmr_denominator, $n_amok] );
+  $self->p_hgmr_n_d( [$p_hgmr_numerator, $p_hgmr_denominator, $n_pmok] );
   $self->mp_agmr_n_d( [$mp_agmr_numerator, $mp_agmr_denominator] );
 }
 

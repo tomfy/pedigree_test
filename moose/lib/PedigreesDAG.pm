@@ -18,11 +18,11 @@ has pedigree_filename => (
 			  required => 1,
 			 );
 
-has accid_parents => (
-		      isa => 'HashRef', # keys are accession ids, values: [matid, patid]
-		      is => 'rw',
-		      default => sub{ {} },
-		     );
+# has accid_parents => (
+# 		      isa => 'HashRef', # keys are accession ids, values: [matid, patid]
+# 		      is => 'rw',
+# 		      default => sub{ {} },
+# 		     );
 
 has id_node => (
 		isa => 'HashRef[Maybe[Str]]', # keys are accession ids, values are Node objects.
@@ -36,56 +36,46 @@ has childless_ids => (
 		      default => sub{ {} },
 		     );
 
-has parentless_ids => (
-		       isa => 'HashRef[Maybe[Str]]', #  key: id (string), value: Node Obj
-		       is => 'rw',
-		       default => sub{ {} },
-		      );
-
-# has the_dag => (
-# 		isa => 'Maybe[DAG]',
-# 		is => 'rw',
-# 		default => undef,
-# 		);
+# has parentless_ids => (
+# 		       isa => 'HashRef[Maybe[Str]]', #  key: id (string), value: Node Obj
+# 		       is => 'rw',
+# 		       default => sub{ {} },
+# 		      );
 
 sub BUILD{
   my $self = shift;
   my $pedigree_filename = $self->pedigree_filename();
 
-  my $accid_parentalids = {};
+  #  my $accid_parentalids = {};
   open my $fh, "<", "$pedigree_filename" or die "couldn't open $pedigree_filename for reading.\n";
   my $first_line = <$fh>;
   die "pedigree file should have 'Accession' at start of first line.\n" if(! ($first_line =~ /^Accession/));
-#  my $the_dag = DAG->new();
+  #  my $the_dag = DAG->new();
   while (my $line = <$fh>) {
     my @cols = split(" ", $line);
     my ($accid, $matid, $patid) = @cols[-3, -2, -1];
     next if($accid eq 'NA');
 
-    
     my $matnode = ($matid eq 'NA')? undef : ( $self->id_node()->{$matid} // Node->new({id => $matid}) );
     my $patnode = ($patid eq 'NA')? undef : ( $self->id_node()->{$patid} // Node->new({id => $patid}) );
     $matnode->add_offspring( $accid ) if(defined $matnode);
     $patnode->add_offspring( $accid ) if(defined $patnode);
 
-    my $anode = $self->id_node()->{$accid} // Node->new({id => $accid});
-      $anode->female_parent( $matnode );
-    $anode->male_parent( $patnode );
-    $self->id_node()->{$accid} = $anode;
-
+    my $anode = $self->id_node()->{$accid} // Node->new({id => $accid, female_parent => $matnode, male_parent => $patnode});
     $self->add_node($anode);
 
-    next if($accid eq 'NA'  or  $matid eq 'NA'  or $patid eq 'NA'); # only store if both parents given.
-    # print "$accid $matid $patid \n";
-    my $parental_idpair = [$matid, $patid]; # PedigreeTest::order_idpair($matid, $patid);
-    $accid_parentalids->{$accid} = $parental_idpair;
   }
-  $self->accid_parents($accid_parentalids);
-#  print STDERR "IS IT ACYCLIC?: ", $the_dag->is_it_acyclic(), "\n";
-#  print STDERR "N ids: ", scalar keys %{$the_dag->id_node()}, "\n";
 
-    print STDERR "IS IT ACYCLIC?: ", $self->is_it_acyclic(), "\n";
-  print STDERR "N ids: ", scalar keys %{$self->id_node()}, "\n";
+  while (my ($id, $anode) = each  %{$self->id_node()}) {
+    if ($anode->offspring() eq '') {
+      $self->childless_ids()->{$id} = 1;
+    }
+  }
+
+  my ($acyclic, $cyclic_id_string) = $self->is_it_acyclic();
+  print STDERR "# Is it acyclic:  $acyclic \n";
+  print STDERR "# Childless accessions with ancestral cyclicities: $cyclic_id_string \n" if($acyclic == 0);
+  print STDERR "# N ids: ", scalar keys %{$self->id_node()}, " N with no offspring: ", scalar keys %{$self->childless_ids()}, "\n";
 }
 
 sub add_node{
@@ -93,19 +83,18 @@ sub add_node{
   my $node = shift;
   my $node_id = $node->id();
   $self->id_node()->{$node_id} = $node;
-  if ($node->offspring() eq '') {
-    $self->childless_ids()->{$node_id} = $node;
-  }
-  if (!defined $node->female_parent()  and  !defined $node->male_parent()) {
-    $self->parentless_ids()->{$node_id} = $node;
-  }
 }
 
-sub parents{
+sub parents{			# return ids of parents, if defined.
   my $self = shift;
   my $accid = shift;
-  my $parents = $self->accid_parents()->{$accid} // undef;
-  return (defined $parents)? @$parents : (undef, undef);
+  if (defined (my $the_node = $self->id_node()->{$accid})){ # // undef;
+    my $fpid = (defined $the_node->female_parent())? $the_node->female_parent()->id() : undef;
+    my $mpid = (defined $the_node->male_parent())? $the_node->male_parent()->id() : undef;
+    return ($fpid, $mpid);
+  } else {
+    return (undef, undef);
+  }
 }
 
 sub as_string{
@@ -123,12 +112,17 @@ sub as_string{
 
 sub is_it_acyclic{
   my $self = shift;
-  for my $childless_node ( map($self->childless_ids()->{$_}, sort keys %{$self->childless_ids()} ) ){
-    my $res = $childless_node->ancestors_acyclic( {} );
-    print STDERR "node ", $childless_node->id(), " and ancestors acyclic?  $res \n\n";
-    return 0 if($res == 0);
+  my $cyclic_nodes = '';	#
+  my $acyclicity = 1;
+  for my $anode ( map($self->id_node()->{$_}, sort keys %{$self->id_node()} ) ) {
+    next if($anode->offspring() ne ''); # skip if has offspring
+    my $node_acyclicity = $anode->ancestors_acyclic( {} ); # is directed graph of node and ancestors acyclic
+    if ($node_acyclicity == 0) {
+      $acyclicity = 0;
+      $cyclic_nodes .= $anode->id() . ' ';
+    }
   }
-  return 1;
+  return ($acyclicity, $cyclic_nodes);
 }
 
 1;

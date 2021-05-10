@@ -10,7 +10,7 @@ use List::Util qw ( min max sum );
 use POSIX qw ( floor ceil );
 use Genotypes;
 use GenotypesSet;
-use Pedigrees;
+#use Pedigrees;
 use PedigreeCheck;
 
 # accession id and string of genotypes
@@ -28,18 +28,29 @@ has pedigrees => (
 		 );
 
 has n_random_parents => (
-		 isa => 'Int',
-		 is => 'ro',
-		 default => 0,
+			 isa => 'Int',
+			 is => 'ro',
+			 default => 0,
 			);
 
 has summary_filename => (
 			 isa => 'Str',
 			 is => 'ro',
 			 default => 'summary',
+			);
+
+has triplecounts27_filename => (
+				isa => 'Maybe[Str]',
+				is => 'ro',
+				default => undef,
+			       );
+has counts14_filename => (
+			  isa => 'Maybe[Str]',
+			  is => 'ro',
+			  default => undef,
 			 );
 
-has pedigree_checks => (
+has pedigree_checks => ( # keys: ids, values: pedigree_check objects.
 			isa => 'HashRef',
 			is => 'rw',
 			default => sub { {} },
@@ -63,27 +74,84 @@ has randrand_checks => (
 			default => sub { {} },
 		       );
 
+has progress_report_interval => (
+				 isa => 'Int',
+				 is => 'ro',
+				 default => 500,
+				);
+
+has Fhgmr_h => ( # dividing value between the two clusters
+		isa => 'Maybe[Num]',
+		is => 'rw',
+		default => undef,
+	       );
+
+has Mhgmr_h => ( # dividing value between the two clusters
+		isa => 'Maybe[Num]',
+		is => 'rw',
+		default => undef,
+	       );
+
+has FMagmr_h => ( # dividing value between the two clusters
+		isa => 'Maybe[Num]',
+		is => 'rw',
+		default => undef,
+	       );
+
+has rx01_h => ( # dividing value between the two clusters
+		isa => 'Maybe[Num]',
+		is => 'rw',
+		default => undef,
+	       );
+
+has r0x1_h => ( # dividing value between the two clusters
+		isa => 'Maybe[Num]',
+		is => 'rw',
+		default => undef,
+	      );
+
+has id_category => ( # keys: ids, values: category strings (e.g. '01010')
+			  isa => 'HashRef[Str]',
+			  is => 'rw',
+			  default => sub{ {} },
+			 );
+
+has category_ids => ( # keys: category strings (e.g. '01101'), values: space separated strings of ids.
+		     isa => 'HashRef[Str]',
+		     is => 'rw',
+		     default => sub{ {} },
+		     );
+
 sub BUILD{
   my $self = shift;
 
   my $gtsetobj = $self->genotypes_set();
   my $accid_gts = $gtsetobj->accid_genotypes(); # values are Genotypes objects
-
   my $peds = $self->pedigrees();
-  my $accid_parents = $peds->accid_parents();
+  #my $accid_parents = $peds->accid_parents();
+
+  my $ostr = $gtsetobj->summary_info_string();
+
+  print STDERR $ostr;
+  open my $fhsummary, ">", $self->summary_filename();
+  print $fhsummary $ostr;
+  my $fh27;
+  if (defined $self->triplecounts27_filename()) {
+    open $fh27, ">", $self->triplecounts27_filename();
+    print $fh27 $ostr;
+  }
+  my $fh14;
+  if (defined $self->counts14_filename()) {
+    open $fh14, ">", $self->counts14_filename();
+    print $fh14 $ostr;
+  }
 
   my $n_pedigree_checks = 0;
-  print STDERR "# n accessions: ", $gtsetobj->n_accessions(), "\n";
-  my $summary_filename = $self->summary_filename();
-  open my $fhsummary, ">", "$summary_filename";
-  print $fhsummary "# n_accessions: " . $gtsetobj->n_accessions() . "\n";
-  print $fhsummary "# delta: " . $gtsetobj->delta() . "\n";
-  print $fhsummary "# n_markers: " . $gtsetobj->n_markers() . "\n";
-
   my @accession_ids = sort keys %$accid_gts;
-  for my $accid (@accession_ids){
+  for my $accid (@accession_ids) {
     my $accgtobj = $accid_gts->{$accid};
     my ($matid, $patid) = $peds->parents($accid); # [matid, patid] if defined
+    #   print $matid // 'undef', "  ", $patid // 'undef', "\n";
     next if(!defined $matid  or  !defined $patid);
 
     my $matgtobj = $accid_gts->{$matid} // undef;
@@ -95,11 +163,20 @@ sub BUILD{
     $self->pedigree_checks()->{$accid} = $pedcheck;
     $pedcheck->compare_to_random_parents($accid_gts);
     print $fhsummary $pedcheck->as_string(), "\n";
+    print $fh27 $pedcheck->as_string_27(), "\n" if(defined $self->triplecounts27_filename());
+    print $fh14 "$accid  ", $accgtobj->quality_counts(), "  $matid $patid  ",
+      $pedcheck->as_string_14(), "\n" if(defined $self->counts14_filename());
     $n_pedigree_checks++;
-    if ($n_pedigree_checks % 200 == 0) {
-      print STDERR "# n pedigree checks created: $n_pedigree_checks \n";
-    }
+    print STDERR "# pedigree checks done: $n_pedigree_checks \n" if(($n_pedigree_checks % $self->progress_report_interval()) == 0);
   }
+  printf($fhsummary "# Female parent - offspring hgmr clusters: n pts: %4i  k-means: %4i %4i %8.5f  kde: %4i %4i %8.5f \n", $self->m_hgmr_cluster());
+  printf($fhsummary "#   Male parent - offspring hgmr clusters: n_pts: %4i  k-means: %4i %4i %8.5f  kde: %4i %4i %8.5f \n", $self->p_hgmr_cluster());
+  printf($fhsummary "# agmr of parents                clusters: n_pts: %4i  k-means: %4i %4i %8.5f  kde: %4i %4i %8.5f \n", $self->mp_agmr_cluster());
+  printf($fhsummary "# rx01                           clusters: n_pts: %4i  k-means: %4i %4i %8.5f  kde: %4i %4i %8.5f \n", $self->rx01_cluster());
+  printf($fhsummary "# r0x1                           clusters: n_pts: %4i  k-means: %4i %4i %8.5f  kde: %4i %4i %8.5f \n", $self->r0x1_cluster());
+  
+
+
 }
 
 sub as_string{
@@ -107,7 +184,7 @@ sub as_string{
   my $gtsetobj = $self->genotypes_set();
   my $the_string = '';
   $the_string .= "# n_accessions: " . $gtsetobj->n_accessions() . "\n";
-  $the_string .= "# n_markers: " . $gtsetobj->n_markers() . "\n";
+  $the_string .= "# n_markers: " . scalar @{$gtsetobj->marker_ids()} . "\n";
   $the_string .= "# delta: " . $gtsetobj->delta() . "\n";
 
   while (my ($accid, $pedchk) = each %{$self->pedigree_checks()}) {
@@ -117,6 +194,131 @@ sub as_string{
   }
   return $the_string;
 }
+
+sub m_hgmr_cluster {
+  my $self = shift;
+
+  my @hgmrs = ();
+  while (my($aid, $pedcheck) = each %{$self->pedigree_checks()}) {
+    push @hgmrs, $pedcheck->m_hgmr();
+  }
+  my $cluster1d_obj = Cluster1d->new({xs => \@hgmrs});
+  my ($n_pts, $km_n_L, $km_n_R, $km_h_opt, $kde_n_L, $kde_n_R, $kde_h_opt) = $cluster1d_obj->one_d_2cluster();
+ $self->Fhgmr_h($kde_h_opt);
+  return ($n_pts, $km_n_L, $km_n_R, $km_h_opt, $kde_n_L, $kde_n_R, $kde_h_opt); # $cluster1d_obj->one_d_2cluster();
+}
+
+  sub p_hgmr_cluster {
+    my $self = shift;
+
+    my @hgmrs = ();
+    while (my($aid, $pedcheck) = each %{$self->pedigree_checks()}) {
+      push @hgmrs, $pedcheck->p_hgmr();
+    }
+    my $cluster1d_obj = Cluster1d->new({xs => \@hgmrs});
+    my ($n_pts, $km_n_L, $km_n_R, $km_h_opt, $kde_n_L, $kde_n_R, $kde_h_opt) = $cluster1d_obj->one_d_2cluster();
+    $self->Mhgmr_h($kde_h_opt);
+    return ($n_pts, $km_n_L, $km_n_R, $km_h_opt, $kde_n_L, $kde_n_R, $kde_h_opt); # $cluster1d_obj->one_d_2cluster();
+  }
+
+sub mp_agmr_cluster {
+  my $self = shift;
+
+  my @agmrs = ();
+  while (my($aid, $pedcheck) = each %{$self->pedigree_checks()}) {
+    push @agmrs, $pedcheck->mp_agmr();
+  }
+  my $cluster1d_obj = Cluster1d->new({xs => \@agmrs});
+  my ($n_pts, $km_n_L, $km_n_R, $km_h_opt, $kde_n_L, $kde_n_R, $kde_h_opt) = $cluster1d_obj->one_d_2cluster();
+  $self->FMagmr_h($kde_h_opt);
+  return ($n_pts, $km_n_L, $km_n_R, $km_h_opt, $kde_n_L, $kde_n_R, $kde_h_opt); # $cluster1d_obj->one_d_2cluster();
+}
+
+sub rx01_cluster {
+  my $self = shift;
+
+  my @rs = ();
+  while (my($aid, $pedcheck) = each %{$self->pedigree_checks()}) {
+    push @rs, $pedcheck->rx01();
+  }
+  my $cluster1d_obj = Cluster1d->new({xs => \@rs});
+  my ($n_pts, $km_n_L, $km_n_R, $km_h_opt, $kde_n_L, $kde_n_R, $kde_h_opt) = $cluster1d_obj->one_d_2cluster();
+  $self->rx01_h($kde_h_opt);
+  return ($n_pts, $km_n_L, $km_n_R, $km_h_opt, $kde_n_L, $kde_n_R, $kde_h_opt); # $cluster1d_obj->one_d_2cluster();
+}
+
+sub r0x1_cluster {
+  my $self = shift;
+
+  my @rs = ();
+  while (my($aid, $pedcheck) = each %{$self->pedigree_checks()}) {
+    push @rs, $pedcheck->r0x1();
+  }
+  my $cluster1d_obj = Cluster1d->new({xs => \@rs});
+  my ($n_pts, $km_n_L, $km_n_R, $km_h_opt, $kde_n_L, $kde_n_R, $kde_h_opt) = $cluster1d_obj->one_d_2cluster();
+  $self->r0x1_h($kde_h_opt);
+  return ($n_pts, $km_n_L, $km_n_R, $km_h_opt, $kde_n_L, $kde_n_R, $kde_h_opt); # $cluster1d_obj->one_d_2cluster();
+}
+
+sub categorize{
+  my $self = shift;
+  my %accid_catstr = ();
+  my %catstr_ids = ();
+  while (my($accid, $pedcheck) = each %{$self->pedigree_checks()}){
+    my $category_string = _x_to_012($pedcheck->mp_agmr(), $self->FMagmr_h());
+
+    $category_string .= _x_to_012($pedcheck->m_hgmr(), $self->Fhgmr_h());
+    $category_string .= _x_to_012($pedcheck->p_hgmr(), $self->Mhgmr_h());
+
+    $category_string .= _x_to_012($pedcheck->rx01(), $self->rx01_h());
+    $category_string .= _x_to_012($pedcheck->r0x1(), $self->r0x1_h());
+    $accid_catstr{$accid} = $category_string;
+    if(! exists $catstr_ids{$category_string}){
+      $catstr_ids{$category_string} = '';
+    }
+    $catstr_ids{$category_string} .= "$accid ";
+  }
+  $self->category_ids(\%catstr_ids);
+  $self->id_category(\%accid_catstr);
+  # while(my($id, $cs) = each %accid_catstr){
+  #   print "$id  $cs \n";
+  # }
+  my @sortedcs = sort keys %catstr_ids;
+  #while(my($cs, $ids) = each %catstr_ids){
+    for my $cs (@sortedcs){
+      my $ids = $catstr_ids{$cs};
+    print "$cs ", scalar split(" ", $ids), "\n"; # "  $ids \n";
+  }
+}
+
+
+### non methods
+
+sub _get_a_pedcheck{
+  my $aid_gts = shift;
+  my ($matid, $patid, $accid) = @_;
+  my $accgtobj = $aid_gts->{$accid} // return undef;
+  my $matgtobj = $aid_gts->{$matid} // return undef;
+  my $patgtobj = $aid_gts->{$patid} // return undef;
+  return  PedigreeCheck->new( { mat_gtsobj => $matgtobj, pat_gtsobj => $patgtobj, acc_gtsobj => $accgtobj } );
+}
+
+sub _x_to_012{
+  my $x = shift;
+  my $h = shift;
+  my $result;
+  if($x > $h){
+    $result = 1;
+  }elsif($x >= 0){
+    $result = 0;
+  }else{
+    $result = 2;
+  }
+  return $result;
+}
+
+
+# unused
 
 # sub print_summary{
 #   my $self = shift;
@@ -136,73 +338,71 @@ sub as_string{
 # }
 
 
-sub as_string_ns{
-  my $self = shift;
-  my $gtsetobj = $self->genotypes_set();
-  my $the_string = '';
-  $the_string .= "#n_accessions: " . $gtsetobj->n_accessions() . "\n";
-  $the_string .= "#n_markers: " . $gtsetobj->n_markers() . "\n";
-  $the_string .= "#delta: " . $gtsetobj->delta() . "\n";
+# sub as_string_ns{
+#   my $self = shift;
+#   my $gtsetobj = $self->genotypes_set();
+#   my $the_string = '';
+#   $the_string .= "#n_accessions: " . $gtsetobj->n_accessions() . "\n";
+#   $the_string .= "#n_markers: " . $gtsetobj->n_markers() . "\n";
+#   $the_string .= "#delta: " . $gtsetobj->delta() . "\n";
 
-  while (my ($accid, $pedchk) = each %{$self->pedigree_checks()}) {
-    my $gtsobj = $gtsetobj->accid_genotypes()->{$accid};
-    $the_string .= $accid . "  " . $gtsobj->quality_counts() . "  ";
-    $the_string .= $pedchk->as_string_ns() . "\n";
-  }
-  return $the_string;
-}
+#   while (my ($accid, $pedchk) = each %{$self->pedigree_checks()}) {
+#     my $gtsobj = $gtsetobj->accid_genotypes()->{$accid};
+#     $the_string .= $accid . "  " . $gtsobj->quality_counts() . "  ";
+#     $the_string .= $pedchk->as_string_ns() . "\n";
+#   }
+#   return $the_string;
+# }
 
-sub as_string_Ns{
-  my $self = shift;
-  my $gtsetobj = $self->genotypes_set();
-  my $the_string = '';
-  $the_string .= "# n_accessions: " . $gtsetobj->n_accessions() . "\n";
-  $the_string .= "# n_markers: " . $gtsetobj->n_markers() . "\n";
-  $the_string .= "# delta: " . $gtsetobj->delta() . "\n";
+# sub as_string_Ns{
+#   my $self = shift;
+#   my $gtsetobj = $self->genotypes_set();
+#   my $the_string = '';
+#   $the_string .= "# n_accessions: " . $gtsetobj->n_accessions() . "\n";
+#   $the_string .= "# n_markers: " . $gtsetobj->n_markers() . "\n";
+#   $the_string .= "# delta: " . $gtsetobj->delta() . "\n";
 
-  #  while (my ($accid, $pedchk) = each %{$self->pedigree_checks()}) {
-  for my $accid (@{$gtsetobj->accession_ids()}) {
-    my $gtsobj = $gtsetobj->accid_genotypes()->{$accid};
-    my $pedchk = $self->pedigree_checks()->{$accid} // undef;
-    $the_string .= $accid . "  " . $gtsobj->quality_counts() . "  ";
-    $the_string .= (defined $pedchk)? $pedchk->as_string_Ns() . "\n" : "  No pedigree \n";
-  }
-  return $the_string;
-}
+#   #  while (my ($accid, $pedchk) = each %{$self->pedigree_checks()}) {
+#   for my $accid (@{$gtsetobj->accession_ids()}) {
+#     my $gtsobj = $gtsetobj->accid_genotypes()->{$accid};
+#     my $pedchk = $self->pedigree_checks()->{$accid} // undef;
+#     $the_string .= $accid . "  " . $gtsobj->quality_counts() . "  ";
+#     $the_string .= (defined $pedchk)? $pedchk->as_string_Ns() . "\n" : "  No pedigree \n";
+#   }
+#   return $the_string;
+# }
 
-sub as_string_xs{
-  my $self = shift;
+# sub as_string_xs{
+#   my $self = shift;
 
-  my $the_string = '';
-  while (my ($accid, $pedchk) = each %{$self->pedigree_checks()}) {
-    $the_string .= $pedchk->as_string_xs() . "   ";
-    my $mrchk = $self->matrand_checks()->{$accid};
-    $the_string .= $mrchk->as_string_xs() . "   ";
-    my $prchk = $self->patrand_checks()->{$accid};
-    $the_string .= $prchk->as_string_xs() . "   ";
-    $the_string .= $self->randrand_checks()->{$accid}->as_string_xs() . "   ";
-    $the_string .= "\n";
-  }
-  return $the_string;
-}
+#   my $the_string = '';
+#   while (my ($accid, $pedchk) = each %{$self->pedigree_checks()}) {
+#     $the_string .= $pedchk->as_string_xs() . "   ";
+#     my $mrchk = $self->matrand_checks()->{$accid};
+#     $the_string .= $mrchk->as_string_xs() . "   ";
+#     my $prchk = $self->patrand_checks()->{$accid};
+#     $the_string .= $prchk->as_string_xs() . "   ";
+#     $the_string .= $self->randrand_checks()->{$accid}->as_string_xs() . "   ";
+#     $the_string .= "\n";
+#   }
+#   return $the_string;
+# }
 
-sub as_string_zs{
-  my $self = shift;
+# sub as_string_zs{
+#   my $self = shift;
 
-  my $the_string = '';
-  while (my ($accid, $pedchk) = each %{$self->pedigree_checks()}) {
-    $the_string .= $pedchk->as_string_zs() . "   ";
-    my $mrchk = $self->matrand_checks()->{$accid};
-    $the_string .= $mrchk->as_string_zs() . "   ";
-    my $prchk = $self->patrand_checks()->{$accid};
-    $the_string .= $prchk->as_string_zs() . "   ";
-    $the_string .= $self->randrand_checks()->{$accid}->as_string_zs() . "   ";
-    $the_string .= "\n";
-  }
-  return $the_string;
-}
-
-### non methods
+#   my $the_string = '';
+#   while (my ($accid, $pedchk) = each %{$self->pedigree_checks()}) {
+#     $the_string .= $pedchk->as_string_zs() . "   ";
+#     my $mrchk = $self->matrand_checks()->{$accid};
+#     $the_string .= $mrchk->as_string_zs() . "   ";
+#     my $prchk = $self->patrand_checks()->{$accid};
+#     $the_string .= $prchk->as_string_zs() . "   ";
+#     $the_string .= $self->randrand_checks()->{$accid}->as_string_zs() . "   ";
+#     $the_string .= "\n";
+#   }
+#   return $the_string;
+# }
 
 # sub _nxyzs{	     # given mat, pat, child gts, get n000, n001, etc.
 #   my $mat_gts = shift;
@@ -244,14 +444,5 @@ sub as_string_zs{
 #   die if(scalar @ch_gts != sum(@nxyzs));
 #   return \@nxyzs;
 # }
-
-sub _get_a_pedcheck{
-  my $aid_gts = shift;
-  my ($matid, $patid, $accid) = @_;
-  my $accgtobj = $aid_gts->{$accid} // return undef;
-  my $matgtobj = $aid_gts->{$matid} // return undef;
-  my $patgtobj = $aid_gts->{$patid} // return undef;
-  return  PedigreeCheck->new( { mat_gtsobj => $matgtobj, pat_gtsobj => $patgtobj, acc_gtsobj => $accgtobj } );
-}
 
 1;
