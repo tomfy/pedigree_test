@@ -6,6 +6,7 @@ use Getopt::Long;
 # use Math::GSL::SF  qw( :all );
 
 use File::Basename 'dirname';
+use Time::HiRes qw( gettimeofday );
 use Cwd 'abs_path';
 my ( $bindir, $libdir );
 BEGIN {     # this has to go in Begin block so happens at compile time
@@ -16,6 +17,7 @@ BEGIN {     # this has to go in Begin block so happens at compile time
 }
 use lib $libdir;
 print STDERR "# libdir: $libdir \n";
+
 
 use GenotypesSet;
 use PedigreesDAG;
@@ -54,6 +56,7 @@ die "No genotypes matrix filename provided.\n" if(!defined $gtfilename);
 
 # Read in the pedigree table:
 
+my $t_start = gettimeofday();
 print STDERR "# Creating PedigreesDAG object from file: $pedigree_table_filename\n";
 my $pedigrees = PedigreesDAG->new({pedigree_filename => $pedigree_table_filename});
 print STDERR "# PedigreesDAG object created.\n\n";
@@ -63,12 +66,18 @@ if($output_pedigrees){
   print $fhout $pedigrees->as_string();
   close $fhout;
 }
+print STDERR "# Time to read pedigree file, create PedigreesDAG obj: ", gettimeofday() - $t_start, "\n";
 
 # Read in the genotype matrix file 
 
+$t_start = gettimeofday();
 print STDERR "# Creating GenotypesSet object.\n# Reading in the gts matrix file.\n";
 my $gtset = GenotypesSet->new({gt_matrix_filename => $gtfilename, delta => $delta, max_bad_gt_fraction => $max_bad_gt_fraction, progress_report_interval => $genotypeset_progress_interval});
 print STDERR "# GenotypesSet object created.\n\n";
+print STDERR "# Time to read in genotypes file, create GenotypesSet obj: ", gettimeofday() - $t_start, "\n";
+# while(my ($k, $v) = each %{$gtset->accid_genotypes()}){
+# print "xxx: [", length $v->genotypes(), "]\n";
+# }
 
 # if( ($max_bad_gt_fraction < 1.0) or ($min_hw_qual_param > 0.0) ){
 #   print STDERR "# removing bad markers. max bad fraction: $max_bad_gt_fraction   min hw qual: $min_hw_qual_param \n";
@@ -76,12 +85,14 @@ print STDERR "# GenotypesSet object created.\n\n";
 # }
 
 if($output_genotype_matrix){
+  print STDERR "Writing output genotype matrix.\n";
   my $gtmatrix_output_filename = $base_output_filename . '_genotypeset';
   open my $fhout, ">", "$gtmatrix_output_filename";
   print $fhout  $gtset->as_string();
   close $fhout;
 }
 
+$t_start = gettimeofday();
 print STDERR "# Create CheckPedigrees object.\n";
 my $summary_output_filename = $base_output_filename . "_summary";
 my $output_filename_27triple_counts = ($output_27triple_counts)? $base_output_filename . "_27" : undef;
@@ -96,9 +107,12 @@ my $check_peds = CheckPedigrees->new({
 				      progress_report_interval => $checkpedigrees_progress_interval,
 				     });
 print STDERR "# PedigreeChecks object created.\n";
+print STDERR "# Time to create CheckPedigrees obj: ", gettimeofday() - $t_start, "\n";
 
-
+$t_start = gettimeofday();
 printf("# Female parent - offspring hgmr clusters: n pts: %4i  k-means: %4i %4i %8.5f  kde: %4i %4i %8.5f \n", $check_peds->m_hgmr_cluster());
 printf("#   Male parent - offspring hgmr clusters: n_pts: %4i  k-means: %4i %4i %8.5f  kde: %4i %4i %8.5f \n", $check_peds->p_hgmr_cluster());
 
 $check_peds->categorize();
+
+print STDERR "# Time of cluster and categorize: ", gettimeofday() - $t_start, "\n";

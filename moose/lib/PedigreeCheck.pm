@@ -384,7 +384,8 @@ sub as_string{
   my $the_string = sprintf("%s  %s  %s  %s   ", $self->acc_gtsobj()->id(),  $self->acc_gtsobj()->quality_counts(), $self->mat_gtsobj()->id(), $self->pat_gtsobj->id());
   $the_string .= sprintf("%7.5f %7.5f %7.5f %7.5f %7.5f   ", $self->m_hgmr(), $self->p_hgmr(), $self->mp_agmr(), $self->rx01(), $self->r0x1());
   $the_string .= $self->as_string_14() . " ";
-   $the_string .= sprintf("%1i %1i %1i", $self->mhgmr_rank(), $self->phgmr_rank(), $self->n_random_parents());
+  $the_string .= sprintf("%1i %1i %1i", $self->mhgmr_rank(), $self->phgmr_rank(), $self->n_random_parents());
+  
   return $the_string;
 }
 
@@ -419,6 +420,21 @@ sub as_string_z{		# lump together n001 n221, etc.
   return $the_string;
 }
 
+# sub double_counts_6{		# just
+#   my $self = shift;
+
+#   my $mat_gtstr = $self->mat_gtsobj()->genotypes();
+#   my $pat_gtstr = $self->pat_gtsobj()->genotypes();
+#   my $acc_gtstr = $self->acc_gtsobj()->genotypes();
+
+#   for my $i (0 .. (length $acc_gtstr) - 1){
+#     my $acc_gt = substr($acc_gtstr, $i, 1);
+#     next if($acc_gt == 3);
+    
+
+#   }
+# }
+
 sub triple_counts_27{ # get N000, N001, etc. for the pedigree.
   my $self = shift;
 
@@ -446,7 +462,7 @@ sub triple_counts_27{ # get N000, N001, etc. for the pedigree.
   my ($m_hgmr_numerator, $m_hgmr_denominator, $n_amok) = (0, 0, 0);
   my ($p_hgmr_numerator, $p_hgmr_denominator, $n_pmok) = (0, 0, 0);
   my @triplecounts_27 = (0) x 28;
-  for my $i (0..3) {
+  for my $i (0..3) { # maternal gt 
     my $i16 = 16*$i;
     for my $j (0..3) {
       my $j4 = 4*$j;
@@ -455,20 +471,22 @@ sub triple_counts_27{ # get N000, N001, etc. for the pedigree.
 	if ($i <= 2  and $j <= 2  and  $k <= 2) {
 	  $triplecounts_27[9*$i + 3*$j + $k] = $tcount;
 	}
-	if ($i <= 2 and $k <= 2) { # mat and acc ok
+	if($k <= 2){
+	if ($i <= 2) { # mat and acc ok
 	  $n_amok++;
 	  if ($i != 1  and  $k != 1) {
 	    $m_hgmr_denominator += $tcount;
 	    $m_hgmr_numerator += $tcount if($i != $k); # 02 or 20
 	  }
 	}
-	if ($j <= 2 and $k <= 2) { # pat and acc ok
+	if ($j <= 2) { # pat and acc ok
 	  $n_pmok++;
 	  if ($j != 1  and  $k != 1) {
 	    $p_hgmr_denominator += $tcount;
 	    $p_hgmr_numerator += $tcount if($j != $k); # 02 or 20
 	  }
 	}
+      }
 	if ($i <= 2 and $j <= 2) { # mat and pat ok
 	  $mp_agmr_denominator += $tcount;
 	  $mp_agmr_numerator += $tcount if($i != $j);

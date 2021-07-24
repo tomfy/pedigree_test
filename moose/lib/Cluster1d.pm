@@ -12,6 +12,11 @@ use constant PI => pi();
 # for clustering a set of non-negative numbers into 2 clusters.
 # negative numbers are interpreted as invalid and excluded.
 
+has label => ( # string describing quantity being clustered
+	      isa => 'Str',
+	      is => 'ro',
+	      default => 'none specified'
+	      );
 
 has xs => ( # numbers to be put into 2 clusters
 	   isa => 'ArrayRef[Num]',
@@ -56,6 +61,8 @@ has kernel_width => (
 
 sub BUILD{
   my $self = shift;
+#  print STDERR "clustered quantity: ", $self->label(), "\n";
+#  print STDERR join(" ", $self->xs()->[0..20]), "\n";
   my @xs = sort {$a <=> $b} @{$self->xs()};
   $self->xs(\@xs);
   my @txs = sort {$a <=> $b} @{$self->xs()};
@@ -68,7 +75,7 @@ sub BUILD{
   for my $x (@txs) {  # find first (i.e. least) number >= $small_limit
     if ($x >= $small_limit) {
       $xsmall = $x;
-      last;
+       last;
     }
   }
   for my $x (@txs) {		# numbers < $xsmall get set to $xsmall
@@ -78,7 +85,7 @@ sub BUILD{
       last;
     }
   }
-  print STDERR "#  size of txs array: ", scalar @txs, "\n";
+#  print STDERR "#  size of txs array: ", scalar @txs, "\n";
   my $pow = $self->pow();
   if ($pow eq 'log') {
     @txs = map(log($_), @txs);
@@ -148,7 +155,7 @@ sub kde_2cluster{
     $kernel_width = $self->n_pts_width($xs, $i_opt) * $self->width_factor(); # sqrt(2.0);
     $self->kernel_width($kernel_width);
   }
-  print STDERR "# in kde_2cluster. kernel width: $kernel_width \n";
+  # print STDERR "# in kde_2cluster. kernel width: $kernel_width \n";
 
   my $kde_i_opt = $i_opt;
   my $kde_x_est = $xs->[$i_opt];
@@ -194,7 +201,7 @@ sub few_kdes{
     } elsif ($kde_est > 10*$min_kde_est) {
       $done = 1;		# last;
     }
-    print STDERR "$i  $x   $kde_est $min_kde_est\n";
+    # print STDERR "$i  $x   $kde_est $min_kde_est\n";
   }
   return ($kde_i_opt, $kde_x_est, $min_kde_est, $done);
 }
@@ -210,7 +217,7 @@ sub n_pts_width{ # in vicinity of $xs[$iguess], find interval width needed to gu
   my $eps = 0.3;
   my $istart = int( (1-$eps)*$i_guess + $eps*0 );
   my $iend = int( (1-$eps)*$i_guess + $eps*($n-1) );
-  print STDERR "# in n_pts_width n_points, istart, iend: $n_points  $istart $iend \n";
+  # print STDERR "# in n_pts_width n_points, istart, iend: $n_points  $istart $iend \n";
   my $sufficient_width = -1;
   for my $i ($istart .. $iend-$n_points) {
     my $width = $xs->[$i+$n_points-1] - $xs->[$i];
